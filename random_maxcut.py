@@ -59,10 +59,6 @@ def bitstring_to_int(bit_string_sample):
 n_wires = n
 dev = qml.device("default.qubit", wires=n, shots=1)
 
-# the gates to randomly choose from
-single_gates = [qml.RX, qml.RY, qml.RZ]
-double_gates = [qml.IsingXX, qml.IsingYY, qml.IsingZZ, qml.IsingXY]
-
 
 # %% MaxCut Hamiltonian
 C, B = qml.qaoa.maxcut(G)
@@ -72,7 +68,8 @@ print(C)
 # %% Circuit
 @qml.qnode(dev)
 def random_circuit(gamma, beta, seed=12345, sample=False, probs=False, n_layers=1):
-    np.random.seed(seed)
+    if n_layers == 1:
+        seed = [seed]
 
     # initialize state to be an equal superposition
     for i in range(n_wires):
@@ -80,21 +77,8 @@ def random_circuit(gamma, beta, seed=12345, sample=False, probs=False, n_layers=
 
     for p in range(n_layers):
         # choose m random gates for the cost Hamiltonian
+        np.random.seed(seed[p])
         for i in range(m):
-            # choose if gate is single qubit or two qubit
-            # qubs = np.random.randint(2)
-
-            # if qubs == 0:
-            #     wire = np.random.randint(n_wires)
-            #     op = np.random.choice(single_gates)
-            #     op(beta[0], wires=wire)
-
-            # else:
-            #     wire = np.random.choice(n_wires, size=2, replace=False)
-            #     op = np.random.choice(double_gates)
-            #     op(gamma[0], wires=[wire.numpy()[0], wire.numpy()[1]])
-            #     wire = np.random.choice(n_wires, size=2, replace=False)
-
             wire = np.random.choice(n_wires, size=2, replace=False)
             qml.IsingZZ(gamma[p], wires=[wire.numpy()[0], wire.numpy()[1]])
 
@@ -242,72 +226,6 @@ def graph(bitstrings, beamer):
     plt.show()
 
 
-# %% Run the Random Thing
-params_rand, bitstrings_rand, most_freq_cut_rand = optimize_angles(random_circuit, n_layers=1)
-# graph(bitstrings, beamer=True)
-
-
-# %% Run the QAOA Thing
-params_qaoa, bitstrings_qaoa, most_freq_cut_qaoa = optimize_angles(qaoa_circuit, n_layers=1)
-# graph(bitstrings, beamer=True)
-
-
-# %% test
-print(qml.draw_mpl(random_circuit, style='solarized_dark', decimals=2)(params_rand[0], params_rand[1]))
-print(qml.draw_mpl(qaoa_circuit, style='solarized_dark', decimals=2)(params_qaoa[0], params_qaoa[1]))
-
-# %% Show MaxCut
-draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_rand:0{n_wires}b}', True)
-plt.axis('off')
-plt.show()
-
-# graph(bitstrings_rand, beamer=True)
-
-# %% Show MaxCut QAOA
-draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_qaoa:0{n_wires}b}', True)
-plt.axis('off')
-plt.show()
-
-# graph(bitstrings_qaoa, beamer=True)
-
-# %% Print Expected Values
-print(random_circuit(params_rand[0],params_rand[1]))
-print(random_circuit(params_qaoa[0],params_qaoa[1]))
-
-print(qaoa_circuit(params_rand[0],params_rand[1]))
-print(qaoa_circuit(params_qaoa[0],params_qaoa[1]))
-
-print(f'{most_freq_cut_qaoa:0{n_wires}b}')
-print(f'{most_freq_cut_rand:0{n_wires}b}')
-
-# %% Probability Circuits
-probs_qaoa = qaoa_circuit(params_qaoa[0], params_qaoa[1], probs=True)
-probs_random = random_circuit(params_rand[0], params_rand[1], probs=True)
-
-graph(probs_qaoa, beamer=True)
-
-
-# %% Generate Multiple Random Circuits
-num_circs = 50
-random_params = []
-random_bitstrings = []
-random_most = []
-random_expvals = []
-
-# set random seed to generate random seeds
-np.random.seed(1)
-seeds = np.random.choice(10000, num_circs)
-
-for i in range(num_circs):
-    print('------------------------------------------------------------')
-    print(f"Random Circuit #{i+1}")
-    params, bitstrings, most = optimize_angles(random_circuit, seed=seeds[i], n_layers=1)
-    random_params.append(params)
-    random_bitstrings.append(bitstrings)
-    random_most.append(most)
-    random_expvals.append(random_circuit(params[0], params[1]))
-
-
 # %% Print Expected Value
 @qml.qnode(dev)
 def cut_expval(bitstring, C):
@@ -323,6 +241,84 @@ def cut_expval(bitstring, C):
 
     return qml.expval(C)
 
+
+# %% Layer Seeds
+def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
+    r"""
+    Generate the seeds used in each layer of the random circuit.
+
+    Args:
+        n_layers (int): the depth of the circuit
+        seeds (list): the random seeds to choose from
+        initial_seed (int): the initial seed (p=1)
+        same_seed (boolean): Whether to use same seed.
+=True (data type): TODO
+
+    Returns:
+        layer_seeds (list): the random seeds used in each layer.
+    """
+    np.random.seed(initial_seed)
+    if n_layers > 1:
+        if same_seed:
+            layer_seeds = [initial_seed for _ in range(n_layers)]
+        else:
+            layer_seeds = [initial_seed] + list(np.random.choice(seeds, n_layers-1))
+    else:
+        layer_seeds = initial_seed
+    return layer_seeds
+
+for i in range(50):
+    print(generate_layer_seeds(1, seeds, initial_seed=i, same_seed=False))
+
+
+# %% Run the QAOA Thing
+params_qaoa, bitstrings_qaoa, most_freq_cut_qaoa = optimize_angles(qaoa_circuit, n_layers=1)
+# graph(bitstrings, beamer=True)
+
+
+
+# %% Generate Multiple Random Circuits
+num_circs = 50
+random_params = []
+random_bitstrings = []
+random_most = []
+random_expvals = []
+
+# set random seed to generate random seeds
+np.random.seed(1)
+seeds = np.random.choice(10000, num_circs)
+p = 1
+
+for i in range(num_circs):
+    print('------------------------------------------------------------')
+    print(f"Random Circuit #{i+1}")
+    layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
+    params, bitstrings, most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
+    random_params.append(params)
+    random_bitstrings.append(bitstrings)
+    random_most.append(most)
+    random_expvals.append(random_circuit(params[0], params[1]))
+
+
+# %% test
+# print(qml.draw_mpl(random_circuit, style='solarized_dark', decimals=2)(params_rand[0], params_rand[1]))
+print(qml.draw_mpl(qaoa_circuit, style='solarized_dark', decimals=2)(params_qaoa[0], params_qaoa[1]))
+
+# %% Show MaxCut
+# draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_rand:0{n_wires}b}', True)
+# plt.axis('off')
+# plt.show()
+
+# graph(bitstrings_rand, beamer=True)
+
+# %% Show MaxCut QAOA
+draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_qaoa:0{n_wires}b}', True)
+plt.axis('off')
+plt.show()
+
+# graph(bitstrings_qaoa, beamer=True)
+
+
 # %% test
 most_freq_cut_qaoa
 print(most_freq_cut_qaoa in random_most)
@@ -334,47 +330,14 @@ for most in random_most:
     print(f'QAOA #{i}:   {cut_expval(most_freq_cut_qaoa,C)/-13.0}')
     print(f'Random #{i}: {cut_expval(most,C)/-13.0}')
 
-# %% Collect Samples of QAOA with random_params
-qaoa_random_bitstrings = []
-qaoa_random_counts = []
-qaoa_random_most = []
-
-n_layers = 1
-i = 0
-for param in random_params:
-    # sample measured bitstrings 1000 times
-    bit_strings = []
-    n_samples = 1000
-    for ii in range(0, n_samples):
-        bit_strings.append(bitstring_to_int(qaoa_circuit(param[0], param[1], sample=True, n_layers=n_layers)))
-
-    # print optimal parameters and most frequently sampled bitstring
-    counts = np.bincount(np.array(bit_strings))
-    most_freq_bit_string = np.argmax(counts)
-
-    qaoa_random_bitstrings.append(bit_strings)
-    qaoa_random_counts.append(counts)
-    qaoa_random_most.append(most_freq_bit_string)
-
-    i = i + 1
-    print('------------------------------------------------------------')
-    print(f"Most frequently sampled bit string is: {most_freq_bit_string:0{n_wires}b} with probability {(counts[most_freq_bit_string]/n_samples):.4f}")
-    print(f'QAOA expval with most #{i}:   {cut_expval(most_freq_bit_string,C)/-13.0}')
 
 # %% Calculate Average AR
 qaoa_ar = 0
-qaoa_random_ar = []
 random_ar = []
 
 for bit in bitstrings_qaoa:
     qaoa_ar = qaoa_ar + cut_expval(bit,C)/-13.0
 qaoa_ar = qaoa_ar/len(bitstrings_qaoa)
-
-for bits in qaoa_random_bitstrings:
-    ar = 0
-    for bit in bits:
-        ar = ar + cut_expval(bit,C)/-13.0
-    qaoa_random_ar.append(ar/len(bits))
 
 for bits in random_bitstrings:
     ar = 0
@@ -387,7 +350,6 @@ for i in range(num_circs):
     print('------------------------------------------------------------')
     print(f'QAOA Average AR with QAOA optimal angles:             {qaoa_ar:.4f}')
     print(f'Random #{i+1} Average AR with Random #{i+1} optimal angles: {random_ar[i]:.4f}')
-    print(f'QAOA Average AR with Random #{i+1} optimal angles:       {qaoa_random_ar[i]:.4f}')
 
 # %% testt
 print(f'random random AR range: [{min(random_ar):.4f}, {max(random_ar):.4f}]')
@@ -396,7 +358,6 @@ print(f'qaoa random AR range: [{min(qaoa_random_ar):.4f}, {max(qaoa_random_ar):.
 # %% testtt
 print(f'QAOA Average AR:                 {qaoa_ar:.4f}')
 print(f'average of all random random AR: {np.average(random_ar):.4f}')
-print(f'average of all qaoa random AR:   {np.average(qaoa_random_ar):.4f}')
 
 
 # %% testttt
@@ -419,8 +380,11 @@ plt.savefig('min_random_circuit.pdf')
 
 # %% testtttt
 # draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_qaoa:0{n_wires}b}', True)
-draw_cut(G, nx.spring_layout(G, seed=1), f'{random_most[15]:0{n_wires}b}', True)
+draw_cut(G, nx.spring_layout(G, seed=1), f'{random_most[15]:0{n_wires}b}', True). 
 # draw_cut(G, nx.spring_layout(G, seed=1), f'{random_most[5]:0{n_wires}b}', True)
 # plt.axis('off')
 # plt.show()
+
+
+
 
