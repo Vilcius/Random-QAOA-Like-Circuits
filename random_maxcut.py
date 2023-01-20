@@ -3,6 +3,10 @@
 # file: random_maxcut.py
 # author: Anthony Wilkie
 
+# TODO: Find more efficient way to calculate expected value (do not create new circuit)
+# TODO: Implement better data post-processing (pandas)
+# TODO: Implement option to do ma-QAOA
+
 
 # %% Import
 import pennylane as qml
@@ -252,7 +256,6 @@ def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
         seeds (list): the random seeds to choose from
         initial_seed (int): the initial seed (p=1)
         same_seed (boolean): Whether to use same seed.
-=True (data type): TODO
 
     Returns:
         layer_seeds (list): the random seeds used in each layer.
@@ -267,9 +270,6 @@ def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
         layer_seeds = initial_seed
     return layer_seeds
 
-for i in range(50):
-    print(generate_layer_seeds(1, seeds, initial_seed=i, same_seed=False))
-
 
 # %% Run the QAOA Thing
 params_qaoa, bitstrings_qaoa, most_freq_cut_qaoa = optimize_angles(qaoa_circuit, n_layers=1)
@@ -279,25 +279,35 @@ params_qaoa, bitstrings_qaoa, most_freq_cut_qaoa = optimize_angles(qaoa_circuit,
 
 # %% Generate Multiple Random Circuits
 num_circs = 50
-random_params = []
-random_bitstrings = []
-random_most = []
-random_expvals = []
+random_params = {}
+random_bitstrings = {}
+random_most = {}
+random_expvals = {}
 
 # set random seed to generate random seeds
 np.random.seed(1)
 seeds = np.random.choice(10000, num_circs)
-p = 1
+p_max = 2
 
-for i in range(num_circs):
-    print('------------------------------------------------------------')
-    print(f"Random Circuit #{i+1}")
-    layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
-    params, bitstrings, most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
-    random_params.append(params)
-    random_bitstrings.append(bitstrings)
-    random_most.append(most)
-    random_expvals.append(random_circuit(params[0], params[1]))
+for p in range(p_max):
+    i_params = []
+    i_bitstrings = []
+    i_most = []
+    i_expvals = []
+    for i in range(num_circs):
+        print('------------------------------------------------------------')
+        print(f"Random Circuit #{i+1}")
+        layer_seeds = generate_layer_seeds(n_layers=p+1, seeds=seeds, initial_seed=seeds[i], same_seed=True)
+        params, bitstrings, most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p+1)
+        i_params.append(params)
+        i_bitstrings.append(bitstrings)
+        i_most.append(most)
+        i_expvals.append(random_circuit(params[0], params[1]))
+
+    random_params[p+1] = i_params
+    random_bitstrings[p+1] = i_bitstrings
+    random_most[p+1] = i_most
+    random_expvals[p+1] = i_expvals
 
 
 # %% test
