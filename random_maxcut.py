@@ -523,65 +523,7 @@ def write_data(circuit, p, angles, bitstrings, most_freq, best_ar, avg_ar,  seed
         return value
     """
     # Create file name
-    if seed_type==None:
-        file = f'{circuit}_p={p}.csv'
-    else:
-        file = f'{circuit}_p={p}_seed={seed_type}.csv'
-
-    with open(file, 'w') as f:
-        # Write header
-        f.write('Circuit,')
-        f.write('p,')
-        if seed_type != None:
-            f.write('seed type,')
-        f.write('Average AR,')
-        f.write('Best AR,')
-        for i in range(p):
-            f.write(f'gamma_{i+1},')
-        for i in range(p):
-            if i == p-1:
-                f.write(f'beta_{i+1}\n')
-            else:
-                f.write(f'beta_{i+1},')
-
-        # Write data
-        if seed_type == None:
-            f.write(f'{circuit},')
-            f.write(f'{p},')
-            f.write(f'{avg_ar},')
-            f.write(f'{best_ar},')
-            for i in range(p):
-                f.write(f'{angles[0][i]},')
-            for i in range(p):
-                if i == p-1:
-                    f.write(f'{angles[1][i]}')
-                else:
-                    f.write(f'{angles[1][i]},')
-        else:
-            for c in range(len(avg_ar)):
-                f.write(f'{circuit}_{c+1},')
-                f.write(f'{p},')
-                f.write(f'{seed_type}')
-                f.write(f'{avg_ar[c]},')
-                f.write(f'{best_ar[c]},')
-                for i in range(p):
-                    f.write(f'{angles[c][0][i]},')
-                for i in range(p):
-                    if i == p-1:
-                        if c == len(avg_ar)-1:
-                            f.write(f'{angles[c][1][i]}')
-                        else:
-                            f.write(f'{angles[c][1][i]}\n')
-                    else:
-                        f.write(f'{angles[c][1][i]},')
-
-    if seed_type==None:
-        file = f'{circuit}_p={p}_bits.csv'
-    else:
-        file = f'{circuit}_p={p}_seed={seed_type}_bits.csv'
-
-    with open(file, 'w') as f:
-
+    print('Hello world')
 
 
 
