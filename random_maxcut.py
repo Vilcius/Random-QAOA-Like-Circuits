@@ -14,27 +14,7 @@ from pennylane import numpy as np
 from matplotlib import pyplot as plt
 
 import networkx as nx
-
-# %% Draw Graph
-def draw_cut(G, pos, bitstring, beamer=False):
-    S0 = [node for node in G.nodes if bitstring[node] == "0"]
-    S1 = [node for node in G.nodes if bitstring[node] == "1"]
-
-    cut_edges = [edge for edge in G.edges if bitstring[edge[0]] != bitstring[edge[1]]]
-    uncut_edges = [edge for edge in G.edges if bitstring[edge[0]] == bitstring[edge[1]]]
-
-    nx.draw_networkx_nodes(G, pos, nodelist=S0, node_color='#a99b63')
-    #nx.draw_networkx_nodes(G, pos, nodelist=S0, node_color='#936846')
-    nx.draw_networkx_nodes(G, pos, nodelist=S1, node_color='#286d8c')
-    if beamer:
-        nx.draw_networkx_edges(G, pos, edgelist=cut_edges, edge_color='#98c9d3', style='dashdot', alpha=0.5)
-        nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, edge_color='#98c9d3', style='solid')
-        plt.rc('figure', facecolor='#041017')
-    else:
-        plt.rcdefaults()
-        nx.draw_networkx_edges(G, pos, edgelist=cut_edges, edge_color='#041017', style='dashdot', alpha=0.5)
-        nx.draw_networkx_edges(G, pos, edgelist=uncut_edges, edge_color='#041017', style='solid')
-    nx.draw_networkx_labels(G, pos)
+import random_maxcut-methods as mthd
 
 
 # %% Create Random Graph
@@ -49,16 +29,10 @@ m = len(G.edges())
 # m = len(edges)
 # G = nx.Graph(edges)
 
-draw_cut(G, nx.spring_layout(G, seed=1), '1'*n, beamer=True)
+mthd.draw_cut(G, nx.spring_layout(G, seed=1), '1'*n, beamer=True)
 plt.axis('off')
 plt.savefig('10_vertex_graph.pdf')
 plt.show()
-
-
-# %% bitstring
-def bitstring_to_int(bit_string_sample):
-    bit_string = "".join(str(bs) for bs in bit_string_sample)
-    return int(bit_string, base=2)
 
 
 # %% Variables
@@ -72,7 +46,7 @@ C, B = qml.qaoa.maxcut(G)
 print(C)
 
 
-# %% Circuit
+# %% Random Circuit
 @qml.qnode(dev)
 def random_circuit(gamma, beta, seed=12345, counts=False, probs=False, n_layers=1):
     if n_layers == 1:
@@ -174,108 +148,6 @@ def optimize_angles(circuit, seed=None, n_layers=1):
     return params, bit_strings, most_freq_bit_string, prob
 
 
-# %% Plot
-import matplotlib.pyplot as plt
-barcolors = ['#286d8c', '#a99b63', '#936846', '#4d7888']
-
-def graph(bitstrings, beamer):
-
-    if beamer:
-        xticks = range(0, 2**(n_wires))
-        xtick_labels = list(map(lambda x: format(x, f"0{n_wires}b"), xticks))
-        bins = np.arange(0, 2**(n_wires)+1) - 0.5
-
-        plt.figure(figsize=(16, 8))
-        plt.rc('font', size=16)
-        plt.rc('axes', edgecolor='#98c9d3', labelcolor='#98c9d3', titlecolor='#98c9d3', facecolor='#041017')
-        plt.rc('figure', facecolor='#041017')
-        plt.rc('savefig', facecolor='#041017')
-        plt.rc('xtick',color='#98c9d3')
-        plt.rc('ytick',color='#98c9d3')
-        plt.rc('legend',labelcolor='#98c9d3', edgecolor='#98c9d3',facecolor=(0,0,0,0))
-        plt.title("s-QAOA")
-        plt.xlabel("Bitstrings")
-        plt.ylabel("Frequency")
-        plt.xticks(xticks, xtick_labels, rotation="vertical")
-        plt.hist(bitstrings,
-                 bins=bins,
-                 density=True,
-                 color=barcolors[0],
-                 edgecolor = "#041017",
-                 # label=[f'scenario {i}' for i in range(n_scenarios)]
-                 )
-        # plt.legend()
-        plt.tight_layout()
-        # plt.savefig('/home/vilcius/School/utk/PHYS_642-quantum_information/project/maxcut_1_beamer.pdf',
-                   # transparent=True)
-    else:
-        xticks = range(0, 2**(n_wires))
-        xtick_labels = list(map(lambda x: format(x, f"0{n_wires}b"), xticks))
-        bins = np.arange(0, 2**(n_wires)+1) - 0.5
-
-        plt.figure(figsize=(16, 8))
-        plt.rc('font', size=16)
-        plt.title("s-QAOA")
-        plt.xlabel("Bitstrings")
-        plt.ylabel("Frequency")
-        plt.xticks(xticks, xtick_labels, rotation="vertical")
-        plt.hist(bitstrings,
-                 bins=bins,
-                 density=True,
-                 color=barcolors[0],
-                 edgecolor = "#041017",
-                 # label=[f'scenario {i}' for i in range(n_scenarios)]
-                 )
-
-        plt.legend()
-        plt.tight_layout()
-        # plt.savefig('/home/vilcius/School/utk/PHYS_642-quantum_information/project/maxcut_1.pdf',
-        #            transparent=True)
-
-    plt.show()
-
-
-# %% Print Expected Value
-@qml.qnode(dev)
-def cut_expval(bitstring, C):
-    r"""
-    Print the expected value of Hamiltonian C with respect to bitstring
-
-    Args:
-        bitstring (data type): TODO
-        C (data type): TODO
-    """
-    psi = np.array([int(i) for i in list(f'{bitstring:0{n}b}')])
-    qml.BasisState(psi,wires=range(n_wires))
-
-    return qml.expval(C)
-
-
-# %% Layer Seeds
-def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
-    r"""
-    Generate the seeds used in each layer of the random circuit.
-
-    Args:
-        n_layers (int): the depth of the circuit
-        seeds (list): the random seeds to choose from
-        initial_seed (int): the initial seed (p=1)
-        same_seed (boolean): Whether to use same seed.
-
-    Returns:
-        layer_seeds (list): the random seeds used in each layer.
-    """
-    np.random.seed(initial_seed)
-    if n_layers > 1:
-        if same_seed:
-            layer_seeds = [initial_seed for _ in range(n_layers)]
-        else:
-            layer_seeds = [initial_seed] + list(np.random.choice(seeds, n_layers-1))
-    else:
-        layer_seeds = initial_seed
-    return layer_seeds
-
-
 # %% Run the QAOA Thing
 qaoa_dict = {}
 p_max = 1
@@ -339,7 +211,7 @@ for p in range(1,p_max+1):
     for i in range(num_circs):
         print('------------------------------------------------------------')
         print(f"Random Circuit #{i+1}, p = {p}")
-        layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
+        layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
         params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
         i_gamma.append(params[0])
         i_beta.append(params[1])
@@ -398,7 +270,7 @@ for p in range(1,p_max+1):
     for i in range(num_circs):
         print('------------------------------------------------------------')
         print(f"Random Circuit #{i+1}, p = {p}")
-        layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=False)
+        layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=False)
         params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
         i_gamma.append(params[0])
         i_beta.append(params[1])
@@ -443,40 +315,13 @@ print(np.max(random_circuits_same[1]['AR distribution']))
 # graph(bitstrings_rand, beamer=True)
 
 # %% Show MaxCut QAOA
-draw_cut(G, nx.spring_layout(G, seed=1), f'{qaoa_dict[1]["most freq cut"]:0{n_wires}b}', False)
+mthd.draw_cut(G, nx.spring_layout(G, seed=1), f'{qaoa_dict[1]["most freq cut"]:0{n_wires}b}', False)
 plt.axis('off')
 plt.savefig('maxcut_10_vertex.pdf')
 plt.show()
-print(cut_expval(qaoa_dict[1]["most freq cut"],C)/-13.0)
+print(mthd.cut_expval(qaoa_dict[1]["most freq cut"],C)/-13.0)
 
 # graph(bitstrings_qaoa, beamer=True)
-
-
-# %% test
-most_freq_cut_qaoa
-print(most_freq_cut_qaoa in random_most)
-
-i=0
-for most in random_most_same[1]:
-    i = i + 1
-    print('------------------------------------------------------------')
-    print(f'QAOA #{i}:   {cut_expval(most_freq_cut_qaoa,C)/-13.0}')
-    print(f'Random #{i}: {cut_expval(most,C)/-13.0}')
-
-
-# %% test
-for i in range(num_circs):
-    print('------------------------------------------------------------')
-    print(f'QAOA Average AR with QAOA optimal angles:             {qaoa_ar:.4f}')
-    print(f'Random #{i+1} Average AR with Random #{i+1} optimal angles: {random_ar[i]:.4f}')
-
-# %% testt
-print(f'random random AR range: [{min(random_ar):.4f}, {max(random_ar):.4f}]')
-print(f'qaoa random AR range: [{min(qaoa_random_ar):.4f}, {max(qaoa_random_ar):.4f}]')
-
-# %% testtt
-print(f'QAOA Average AR:                 {qaoa_ar:.4f}')
-print(f'average of all random random AR: {np.average(random_ar):.4f}')
 
 
 # %% testttt
@@ -494,7 +339,7 @@ plt.savefig('paper/qaoa_circuit_1.pdf')
 
 
 # %% testtttt
-draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_qaoa:0{n_wires}b}', True)
+mthd.draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_qaoa:0{n_wires}b}', True)
 plt.savefig('maxcut_10_vertex.pdf')
 # draw_cut(G, nx.spring_layout(G, seed=1), f'{random_most[15]:0{n_wires}b}', True). 
 # draw_cut(G, nx.spring_layout(G, seed=1), f'{random_most[5]:0{n_wires}b}', True)
@@ -502,52 +347,12 @@ plt.savefig('maxcut_10_vertex.pdf')
 # plt.show()
 
 
-# %% Write Data
-def write_data(circuit, p, angles, bitstrings, most_freq, best_ar, avg_ar,  seed_type=None):
-    r"""
-    Documention of method
-
-    Args:
-        circuit (data type): TODO
-    p (data type): TODO
-    angles (data type): TODO
-    bitstrings (data type): TODO
-    most_freq (data type): TODO
-    ar (data type): TODO
-    seed_type (data type): TODO
-=None (data type): TODO
-
-    Returns:
-        return value
-    """
-    # Create file name
-    print('Hello world')
-
-
 
 for p in range(1,p_max+1):
-    write_data(circuit='QAOA', p=p, angles=qaoa_params[p], bitstrings=qaoa_bitstrings[p], most_freq=qaoa_most[p], avg_ar=qaoa_avg_ar[p], best_ar=qaoa_best_ar[p], seed_type=None)
+    mthd.write_data(circuit='QAOA', p=p, angles=qaoa_params[p], bitstrings=qaoa_bitstrings[p], most_freq=qaoa_most[p], avg_ar=qaoa_avg_ar[p], best_ar=qaoa_best_ar[p], seed_type=None)
 
 # for p in range(1,3):
 #     write_data(circuit='random', p=p, angles=random_params_same[p], bitstrings=random_bitstrings_same[p], most_freq=random_most_same[p], avg_ar=random_ar, best_ar=qaoa_ar_best, seed_type=None)
-
-
-
-
-# %% t
-prob_dict = {}
-for i in np.sort(qaoa_avg_ar[1]):
-    if i in prob_dict.keys():
-        prob_dict[i] += 1
-    else:
-        prob_dict[i] = 1
-print(prob_dict)
-print(prob_dict[max(prob_dict.keys())]/len(qaoa_avg_ar[1]))
-
-# %% file
-with open('QAOA_bits.txt','w') as f:
-    f.write(str(qaoa_bitstrings))
-
 
 
 # %% stuff
@@ -576,16 +381,7 @@ diff_index = random_circuits_diff[p]['average AR'].index(np.max(random_circuits_
 # rand_max_fig.suptitle(f"Random QAOA-like circuit with maximum AR, p={p}", fontsize="xx-large")
 # plt.savefig(f'paper/random_circuit_max_ar_{p}.pdf')
 
-layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
+layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
 rand_diff_max_fig, rand_diff_max_ax = qml.draw_mpl(random_circuit, decimals=2)(random_circuits_diff[p]['gamma'][diff_index], random_circuits_diff[p]['beta'][diff_index], layer_seeds,n_layers=p)
 rand_diff_max_fig.suptitle(f"Random QAOA-like circuit with maximum AR, p={p}, different", fontsize="xx-large")
 plt.savefig(f'paper/random_circuit_max_ar_{p}_diff.pdf')
-
-# %% cell name
-p=2
-layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
-print(layer_seeds)
-
-
-# %% cell name
-3.3/8
