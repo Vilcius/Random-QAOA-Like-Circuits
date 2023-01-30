@@ -49,7 +49,7 @@ m = len(G.edges())
 # m = len(edges)
 # G = nx.Graph(edges)
 
-draw_cut(G, nx.spring_layout(G, seed=1), '1'*n, beamer=False)
+draw_cut(G, nx.spring_layout(G, seed=1), '1'*n, beamer=True)
 plt.axis('off')
 plt.savefig('10_vertex_graph.pdf')
 plt.show()
@@ -63,7 +63,8 @@ def bitstring_to_int(bit_string_sample):
 
 # %% Variables
 n_wires = n
-dev = qml.device("default.qubit", wires=n, shots=1)
+shots=1000
+dev = qml.device("default.qubit", wires=n, shots=shots)
 
 
 # %% MaxCut Hamiltonian
@@ -73,7 +74,7 @@ print(C)
 
 # %% Circuit
 @qml.qnode(dev)
-def random_circuit(gamma, beta, seed=12345, sample=False, probs=False, n_layers=1):
+def random_circuit(gamma, beta, seed=12345, counts=False, probs=False, n_layers=1):
     if n_layers == 1:
         seed = [seed]
 
@@ -94,9 +95,9 @@ def random_circuit(gamma, beta, seed=12345, sample=False, probs=False, n_layers=
         qml.qaoa.mixer_layer(beta[p], B)
 
     # return samples instead of expectation value
-    if sample:
+    if counts:
         # measurement phase
-        return qml.sample()
+        return qml.counts(all_coutcomes=True)
 
     # return probabilities instead of expectation value
     if probs:
@@ -108,7 +109,7 @@ def random_circuit(gamma, beta, seed=12345, sample=False, probs=False, n_layers=
 
 # %% QAOA Circuit
 @qml.qnode(dev)
-def qaoa_circuit(gamma, beta, seed=None, sample=False, probs=False, n_layers=1):
+def qaoa_circuit(gamma, beta, seed=None, counts=False, probs=False, n_layers=1):
     # initialize state to be an equal superposition
     for i in range(n_wires):
         qml.Hadamard(i)
@@ -121,9 +122,9 @@ def qaoa_circuit(gamma, beta, seed=None, sample=False, probs=False, n_layers=1):
         qml.qaoa.mixer_layer(beta[p], B)
 
     # return samples instead of expectation value
-    if sample:
+    if counts:
         # measurement phase
-        return qml.sample()
+        return qml.counts(all_outcomes=True)
 
     # return probabilities instead of expectation value
     if probs:
@@ -161,17 +162,14 @@ def optimize_angles(circuit, seed=None, n_layers=1):
             print("Objective after step {:5d}: {: .7f}".format(i + 1, -objective(params)))
 
     # sample measured bitstrings 1000 times
-    bit_strings = []
-    n_samples = 1000
-    for i in range(0, n_samples):
-        bit_strings.append(bitstring_to_int(circuit(params[0], params[1], seed, sample=True, n_layers=n_layers)))
+    n_counts = shots
+    counts = circuit(params[0], params[1], seed, counts=True, n_layers=n_layers)
 
     # print optimal parameters and most frequently sampled bitstring
-    counts = np.bincount(np.array(bit_strings))
-    most_freq_bit_string = np.argmax(counts)
+    most_freq_bit_string = max(counts, key=counts.get)
     prob = counts[most_freq_bit_string]/n_samples
     print(f"Optimized (gamma, beta) vectors:\n{params[:, :n_layers]}")
-    print(f"Most frequently sampled bit string is: {most_freq_bit_string:0{n_wires}b} with probability {prob:.4f}")
+    print(f"Most frequently sampled bit string is: {most_freq_bit_string} with probability {prob:.4f}")
 
     return params, bit_strings, most_freq_bit_string, prob
 
@@ -280,7 +278,7 @@ def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
 
 # %% Run the QAOA Thing
 qaoa_dict = {}
-p_max = 2
+p_max = 1
 
 for p in range(1,p_max+1):
     qaoa_dict[p] = {}
@@ -587,3 +585,7 @@ plt.savefig(f'paper/random_circuit_max_ar_{p}_diff.pdf')
 p=2
 layer_seeds = generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
 print(layer_seeds)
+
+
+# %% cell name
+3.3/8
