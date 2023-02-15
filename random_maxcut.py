@@ -14,7 +14,9 @@ from pennylane import numpy as np
 from matplotlib import pyplot as plt
 
 import networkx as nx
-import random_maxcut-methods as mthd
+import random_maxcut_methods as mthd
+import json
+import pandas as pd
 
 
 # %% Create Random Graph
@@ -61,7 +63,12 @@ def random_circuit(gamma, beta, seed=12345, counts=False, probs=False, n_layers=
         np.random.seed(seed[p])
         qml.Barrier(wires=range(n_wires), only_visual=True)
         for i in range(m):
-            wire = np.random.choice(n_wires, size=2, replace=False)
+            is_edge=True
+            while is_edge:
+                wire = np.random.choice(n_wires, size=2, replace=False)
+                if (wire[0],wire[1]) not in G.edges():
+                    is_edge=False
+
             qml.IsingZZ(gamma[p], wires=[wire.numpy()[0], wire.numpy()[1]])
         qml.Barrier(wires=range(n_wires), only_visual=True)
 
@@ -71,7 +78,7 @@ def random_circuit(gamma, beta, seed=12345, counts=False, probs=False, n_layers=
     # return samples instead of expectation value
     if counts:
         # measurement phase
-        return qml.counts(all_coutcomes=True)
+        return qml.counts(all_outcomes=True)
 
     # return probabilities instead of expectation value
     if probs:
@@ -141,32 +148,32 @@ def optimize_angles(circuit, seed=None, n_layers=1):
 
     # print optimal parameters and most frequently sampled bitstring
     most_freq_bit_string = max(counts, key=counts.get)
-    prob = counts[most_freq_bit_string]/n_samples
+    prob = counts[most_freq_bit_string]/n_counts
     print(f"Optimized (gamma, beta) vectors:\n{params[:, :n_layers]}")
     print(f"Most frequently sampled bit string is: {most_freq_bit_string} with probability {prob:.4f}")
 
-    return params, bit_strings, most_freq_bit_string, prob
+    return params, counts, most_freq_bit_string, prob
 
 
 # %% Run the QAOA Thing
 qaoa_dict = {}
-p_max = 1
+p_max = 2
 
 for p in range(1,p_max+1):
     qaoa_dict[p] = {}
     params, bitstrings, most, prob_most = optimize_angles(qaoa_circuit, n_layers=p)
-    qaoa_dict[p]['gamma'] = params[0]
-    qaoa_dict[p]['beta'] = params[1]
+    qaoa_dict[p]['gamma'] = params[0].numpy().tolist()
+    qaoa_dict[p]['beta'] = params[1].numpy().tolist()
     qaoa_dict[p]['cuts'] = bitstrings
     qaoa_dict[p]['most freq cut'] = most
     qaoa_dict[p]['prob most freq cut'] = prob_most
 
     ar = []
     for bit in bitstrings:
-        ar.append(cut_expval(bit,C)/-13.0)
+        ar.append(mthd.cut_expval(dev,bit,C)/-13.0)
 
     prob_dict = {}
-    for i in np.sort(ar):
+    for i in np.sort(ar).numpy().tolist():
         if i in prob_dict.keys():
             prob_dict[i] += 1
         else:
@@ -174,152 +181,160 @@ for p in range(1,p_max+1):
     qaoa_dict[p]['AR distribution'] = prob_dict
 
     qaoa_dict[p]['average AR'] = np.mean(ar)
-    qaoa_dict[p]['best AR'] = max(ar)
-    qaoa_dict[p]['prob best AR'] = prob_dict[max(ar)]/len(ar)
+    qaoa_dict[p]['best AR'] = max(ar).numpy()
+    qaoa_dict[p]['prob best AR'] = prob_dict[max(ar).numpy()]/len(ar)
 # graph(bitstrings, beamer=True)
+
+# %% dataframe
+print('------------------------------------------------------------')
+print('write qaoa')
+# with open('qaoa_data.txt', 'w') as f:
+#     f.write(json.dumps(qaoa_dict, cls=NpEncoder))
+qaoa_df = pd.DataFrame.from_dict(qaoa_dict)
+qaoa_df.to_json('qaoa_data.txt', orient='columns')
+print('qaoa written')
+
+
+
+# %% cell name
+qaoa_df
 
 # %% cell name
 # print(qaoa_dict[1]['AR distribution'])
 print(qaoa_dict[1]['average AR'])
-print(qaoa_dict[2]['average AR'])
 print(qaoa_dict[1]['prob best AR'])
-print(qaoa_dict[2]['prob best AR'])
 print(qaoa_dict[1]['prob most freq cut'])
-print(qaoa_dict[2]['prob most freq cut'])
 
 # %% Generate Multiple Random Circuits
 num_circs = 50
 
-random_circuits_same = {}
+random_circuits_dict = {}
 
 # set random seed to generate random seeds
 np.random.seed(1)
 seeds = np.random.choice(10000, num_circs)
-p_max = 2
+p_max = 1
+sameness = [True, False]
 
 for p in range(1,p_max+1):
-    random_circuits_same[p] = {}
-    i_gamma = []
-    i_beta = []
-    i_bitstrings = []
-    i_most = []
-    i_prob_most = []
-    i_ar = []
-    i_avg_ar = []
-    i_best_ar = []
-    i_prob_best_ar = []
-    for i in range(num_circs):
-        print('------------------------------------------------------------')
-        print(f"Random Circuit #{i+1}, p = {p}")
-        layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
-        params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
-        i_gamma.append(params[0])
-        i_beta.append(params[1])
-        i_bitstrings.append(bitstrings)
-        i_most.append(most)
-        i_prob_most.append(prob_most)
+    random_circuits_dict[p] = {}
+    if p == 1:
+        i_same_seed = {}
+        i_gamma = []
+        i_beta = []
+        i_bitstrings = []
+        i_most = []
+        i_prob_most = []
+        i_ar = []
+        i_avg_ar = []
+        i_best_ar = []
+        i_prob_best_ar = []
+        for i in range(num_circs):
+            print('------------------------------------------------------------')
+            print(f"Random Circuit #{i+1}, p = {p}")
+            layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=True)
+            params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
+            i_gamma.append(params[0].numpy().tolist())
+            i_beta.append(params[1].numpy().tolist())
+            i_bitstrings.append(bitstrings)
+            i_most.append(most)
+            i_prob_most.append(prob_most)
 
-        ar = []
-        for bit in bitstrings:
-            ar.append(cut_expval(bit,C)/-13.0)
+            ar = []
+            for bit in bitstrings:
+                ar.append(mthd.cut_expval(dev, bit,C)/-13.0)
 
-        prob_dict = {}
-        for ii in np.sort(ar):
-            if ii in prob_dict.keys():
-                prob_dict[ii] += 1
-            else:
-                prob_dict[ii] = 1
-        i_ar.append(prob_dict)
+            prob_dict = {}
+            for ii in np.sort(ar).numpy().tolist():
+                if ii in prob_dict.keys():
+                    prob_dict[ii] += 1
+                else:
+                    prob_dict[ii] = 1
+            i_ar.append(prob_dict)
 
-        i_avg_ar.append(np.mean(ar))
-        i_best_ar.append(max(ar))
-        i_prob_best_ar.append(prob_dict[max(ar)]/len(ar))
+            i_avg_ar.append(np.mean(ar))
+            i_best_ar.append(max(ar).numpy())
+            i_prob_best_ar.append(prob_dict[max(ar).numpy()]/len(ar))
 
-    random_circuits_same[p]['gamma'] = i_gamma
-    random_circuits_same[p]['beta'] = i_beta
-    random_circuits_same[p]['cuts'] = i_bitstrings
-    random_circuits_same[p]['most freq cut'] = i_most
-    random_circuits_same[p]['prob most freq cut'] = i_prob_most
-    random_circuits_same[p]['AR distribution'] = i_ar
-    random_circuits_same[p]['average AR'] = i_avg_ar
-    random_circuits_same[p]['best AR'] = i_best_ar
-    random_circuits_same[p]['prob best AR'] = i_prob_best_ar
+        random_circuits_dict[p]['gamma'] = i_gamma
+        random_circuits_dict[p]['beta'] = i_beta
+        random_circuits_dict[p]['cuts'] = i_bitstrings
+        random_circuits_dict[p]['most freq cut'] = i_most
+        random_circuits_dict[p]['prob most freq cut'] = i_prob_most
+        random_circuits_dict[p]['AR distribution'] = i_ar
+        random_circuits_dict[p]['average AR'] = i_avg_ar
+        random_circuits_dict[p]['best AR'] = i_best_ar
+        random_circuits_dict[p]['prob best AR'] = i_prob_best_ar
+    else:
+        for same in sameness:
+            i_same_seed = {}
+            i_gamma = []
+            i_beta = []
+            i_bitstrings = []
+            i_most = []
+            i_prob_most = []
+            i_ar = []
+            i_avg_ar = []
+            i_best_ar = []
+            i_prob_best_ar = []
+            for i in range(num_circs):
+                print('------------------------------------------------------------')
+                print(f"Random Circuit #{i+1}, p = {p}, same={same}")
+                layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=same)
+                params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
+                i_gamma.append(params[0].numpy().tolist())
+                i_beta.append(params[1].numpy().tolist())
+                i_bitstrings.append(bitstrings)
+                i_most.append(most)
+                i_prob_most.append(prob_most)
 
+                ar = []
+                for bit in bitstrings:
+                    ar.append(mthd.cut_expval(dev, bit,C)/-13.0)
 
-# %% Generate Multiple Random Circuits
-num_circs = 50
+                prob_dict = {}
+                for ii in np.sort(ar).numpy().tolist():
+                    if ii in prob_dict.keys():
+                        prob_dict[ii] += 1
+                    else:
+                        prob_dict[ii] = 1
+                i_ar.append(prob_dict)
 
-random_circuits_diff = {}
+                i_avg_ar.append(np.mean(ar))
+                i_best_ar.append(max(ar).numpy())
+                i_prob_best_ar.append(prob_dict[max(ar).numpy()]/len(ar))
 
-# set random seed to generate random seeds
-np.random.seed(1)
-seeds = np.random.choice(10000, num_circs)
-p_max = 2
+            i_same_seed['gamma'] = i_gamma
+            i_same_seed['beta'] = i_beta
+            i_same_seed['cuts'] = i_bitstrings
+            i_same_seed['most freq cut'] = i_most
+            i_same_seed['prob most freq cut'] = i_prob_most
+            i_same_seed['AR distribution'] = i_ar
+            i_same_seed['average AR'] = i_avg_ar
+            i_same_seed['best AR'] = i_best_ar
+            i_same_seed['prob best AR'] = i_prob_best_ar
+            random_circuits_dict[p][same] = i_same_seed
+            
+# %% data
+print('------------------------------------------------------------')
+print('write random_circuits')
+# random_circuits_df = pd.DataFrame.from_dict(random_circuits_dict)
+# random_circuits_df.to_json('random_circuits_data.txt', orient='columns')
+random_circuits_not_edge_df = pd.DataFrame.from_dict(random_circuits_dict)
+random_circuits_not_edge_df.to_json('random_circuits_not_edge_data.txt', orient='columns')
+print('random_circuits written')
 
-for p in range(1,p_max+1):
-    random_circuits_diff[p] = {}
-    i_gamma = []
-    i_beta = []
-    i_bitstrings = []
-    i_most = []
-    i_prob_most = []
-    i_ar = []
-    i_avg_ar = []
-    i_best_ar = []
-    i_prob_best_ar = []
-    for i in range(num_circs):
-        print('------------------------------------------------------------')
-        print(f"Random Circuit #{i+1}, p = {p}")
-        layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[i], same_seed=False)
-        params, bitstrings, most, prob_most = optimize_angles(random_circuit, seed=layer_seeds, n_layers=p)
-        i_gamma.append(params[0])
-        i_beta.append(params[1])
-        i_bitstrings.append(bitstrings)
-        i_most.append(most)
-        i_prob_most.append(prob_most)
-
-        ar = []
-        for bit in bitstrings:
-            ar.append(cut_expval(bit,C)/-13.0)
-
-        prob_dict = {}
-        for ii in np.sort(ar):
-            if ii in prob_dict.keys():
-                prob_dict[ii] += 1
-            else:
-                prob_dict[ii] = 1
-        i_ar.append(prob_dict)
-
-        i_avg_ar.append(np.mean(ar))
-        i_best_ar.append(max(ar))
-        i_prob_best_ar.append(prob_dict[max(ar)]/len(ar))
-
-    random_circuits_diff[p]['gamma'] = i_gamma
-    random_circuits_diff[p]['beta'] = i_beta
-    random_circuits_diff[p]['cuts'] = i_bitstrings
-    random_circuits_diff[p]['most freq cut'] = i_most
-    random_circuits_diff[p]['prob most freq cut'] = i_prob_most
-    random_circuits_diff[p]['AR distribution'] = i_ar
-    random_circuits_diff[p]['average AR'] = i_avg_ar
-    random_circuits_diff[p]['best AR'] = i_best_ar
-    random_circuits_diff[p]['prob best AR'] = i_prob_best_ar
 
 # %% cell name
-print(np.max(random_circuits_same[1]['AR distribution']))
+random_circuits_df
 
-# %% Show MaxCut
-# draw_cut(G, nx.spring_layout(G, seed=1), f'{most_freq_cut_rand:0{n_wires}b}', True)
-# plt.axis('off')
-# plt.show()
-
-# graph(bitstrings_rand, beamer=True)
 
 # %% Show MaxCut QAOA
-mthd.draw_cut(G, nx.spring_layout(G, seed=1), f'{qaoa_dict[1]["most freq cut"]:0{n_wires}b}', False)
+mthd.draw_cut(G, nx.spring_layout(G, seed=1), qaoa_dict[1]["most freq cut"], True)
 plt.axis('off')
 plt.savefig('maxcut_10_vertex.pdf')
 plt.show()
-print(mthd.cut_expval(qaoa_dict[1]["most freq cut"],C)/-13.0)
+print(mthd.cut_expval(dev,qaoa_dict[1]["most freq cut"],C)/-13.0)
 
 # graph(bitstrings_qaoa, beamer=True)
 
@@ -327,7 +342,7 @@ print(mthd.cut_expval(qaoa_dict[1]["most freq cut"],C)/-13.0)
 # %% testttt
 qaoa_fig, qaoa_ax = qml.draw_mpl(qaoa_circuit, decimals=1)(qaoa_dict[1]['gamma'], qaoa_dict[1]['beta'], n_layers=1)
 qaoa_fig.suptitle("QAOA Circuit", fontsize="xx-large")
-plt.savefig('paper/qaoa_circuit_1.pdf')
+plt.savefig('../paper/qaoa_circuit_1.pdf')
 
 # rand_max_fig, rand_max_ax = qml.draw_mpl(random_circuit, style='default', decimals=2)(random_params[15][0], random_params[15][1], seeds[15])
 # rand_max_fig.suptitle("Max AR Random Circuit", fontsize="xx-large")
@@ -357,20 +372,25 @@ for p in range(1,p_max+1):
 
 # %% stuff
 print('------------------------------------------------------------')
-print(f"{qaoa_dict[2]['average AR']:.6f}")
+print(f"{qaoa_dict[1]['average AR']:.6f}")
 print('------------------------------------------------------------')
-print(f"{np.average(random_circuits_same[2]['average AR']):.6f}")
-print(f"{np.min(random_circuits_same[2]['average AR']):.6f}")
-print(f"{np.max(random_circuits_same[2]['average AR']):.6f}")
+print(f"{np.average(random_circuits_dict[1]['average AR']):.6f}")
+print(f"{np.min(random_circuits_dict[1]['average AR']):.6f}")
+print(f"{np.max(random_circuits_dict[1]['average AR']):.6f}")
 print('------------------------------------------------------------')
-print(f"{np.average(random_circuits_diff[2]['average AR']):.6f}")
-print(f"{np.min(random_circuits_diff[2]['average AR']):.6f}")
-print(f"{np.max(random_circuits_diff[2]['average AR']):.6f}")
+print(f"{np.average(random_circuits_dict[1]['average AR']):.6f}")
+print(f"{np.min(random_circuits_dict[1]['average AR']):.6f}")
+print(f"{np.max(random_circuits_dict[1]['average AR']):.6f}")
+print('------------------------------------------------------------')
+print('------------------------------------------------------------')
+print(f"{random_circuits_dict[1]['gamma']}")
+print('------------------------------------------------------------')
+print(f"{random_circuits_dict[1]['beta']}")
 
 
-p=2
-same_index = random_circuits_same[p]['average AR'].index(np.max(random_circuits_diff[p]['average AR']))
-diff_index = random_circuits_diff[p]['average AR'].index(np.max(random_circuits_diff[p]['average AR']))
+# p=2
+# same_index = random_circuits_same[p]['average AR'].index(np.max(random_circuits_diff[p]['average AR']))
+# diff_index = random_circuits_diff[p]['average AR'].index(np.max(random_circuits_diff[p]['average AR']))
 
 # qaoa_fig, qaoa_ax = qml.draw_mpl(qaoa_circuit, decimals=2)(qaoa_dict[p]['gamma'], qaoa_dict[p]['beta'], n_layers=p)
 # qaoa_fig.suptitle(f"QAOA Circuit, p={p}", fontsize="xx-large")
@@ -381,7 +401,20 @@ diff_index = random_circuits_diff[p]['average AR'].index(np.max(random_circuits_
 # rand_max_fig.suptitle(f"Random QAOA-like circuit with maximum AR, p={p}", fontsize="xx-large")
 # plt.savefig(f'paper/random_circuit_max_ar_{p}.pdf')
 
-layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
-rand_diff_max_fig, rand_diff_max_ax = qml.draw_mpl(random_circuit, decimals=2)(random_circuits_diff[p]['gamma'][diff_index], random_circuits_diff[p]['beta'][diff_index], layer_seeds,n_layers=p)
-rand_diff_max_fig.suptitle(f"Random QAOA-like circuit with maximum AR, p={p}, different", fontsize="xx-large")
-plt.savefig(f'paper/random_circuit_max_ar_{p}_diff.pdf')
+
+# layer_seeds = mthd.generate_layer_seeds(n_layers=p, seeds=seeds, initial_seed=seeds[diff_index], same_seed=False)
+# rand_diff_max_fig, rand_diff_max_ax = qml.draw_mpl(random_circuit, decimals=2)(random_circuits_diff[p]['gamma'][diff_index], random_circuits_diff[p]['beta'][diff_index], layer_seeds,n_layers=p)
+# rand_diff_max_fig.suptitle(f"Random QAOA-like circuit with maximum AR, p={p}, different", fontsize="xx-large")
+# plt.savefig(f'paper/random_circuit_max_ar_{p}_diff.pdf')
+
+# %% Write Date
+wires=np.random.choice(n_wires, size=2, replace=False).numpy()
+print((wires[0], wires[1]))
+G.edges()
+
+# %% cell name
+print(random_circuits_dict[1]['average AR'])
+print(random_circuits_dict[1]['AR distribution'][1])
+print(random_circuits_dict[1]['AR distribution'][49])
+
+

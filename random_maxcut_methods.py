@@ -100,19 +100,29 @@ def graph(bitstrings, beamer):
 
 
 # %% Print Expected Value
-@qml.qnode(dev)
-def cut_expval(bitstring, C):
+def cut_expval(dev, bitstring, C):
     r"""
     Print the expected value of Hamiltonian C with respect to bitstring
 
     Args:
+        dev (data type): TODO
         bitstring (data type): TODO
         C (data type): TODO
     """
-    psi = np.array([int(i) for i in list(f'{bitstring:0{n}b}')])
-    qml.BasisState(psi,wires=range(n_wires))
+    @qml.qnode(dev)
+    def _cut_expval(bitstring, C):
+        r"""
+        Print the expected value of Hamiltonian C with respect to bitstring
 
-    return qml.expval(C)
+        Args:
+            bitstring (data type): TODO
+            C (data type): TODO
+        """
+        psi = np.array([int(i) for i in bitstring])
+        qml.BasisState(psi,wires=range(len(bitstring)))
+
+        return qml.expval(C)
+    return _cut_expval(bitstring, C)
 
 
 # %% Layer Seeds
@@ -138,27 +148,4 @@ def generate_layer_seeds(n_layers, seeds, initial_seed=3, same_seed=True):
     else:
         layer_seeds = initial_seed
     return layer_seeds
-
-
-# %% Write Data
-def write_data(circuit, p, angles, bitstrings, most_freq, best_ar, avg_ar,  seed_type=None):
-    r"""
-    Documention of method
-
-    Args:
-        circuit (data type): TODO
-    p (data type): TODO
-    angles (data type): TODO
-    bitstrings (data type): TODO
-    most_freq (data type): TODO
-    ar (data type): TODO
-    seed_type (data type): TODO
-=None (data type): TODO
-
-    Returns:
-        return value
-    """
-    # Create file name
-    print('Hello world')
-
 
