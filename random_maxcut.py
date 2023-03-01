@@ -23,7 +23,9 @@ import pandas as pd
 n = 10
 p = 0.3
 graph_seed = 18
+# graph_seed = 19
 G = nx.gnp_random_graph(n, p, seed=graph_seed)
+edges = G.edges()
 m = len(G.edges())
 
 # n = 5
@@ -36,11 +38,63 @@ plt.axis('off')
 plt.savefig('10_vertex_graph.pdf')
 plt.show()
 
+# %% Triangles
+def get_triangles(G, u, v):
+    r"""
+    Return the triangle subgraphs of G that contain the vertices u and v
+
+    Args:
+        G (networkx.Graph): graph
+        u (int): vertex
+        v (int): vertex
+
+    Returns:
+        tri_uv (list): the triangles
+    """
+    
+    # get the subgraph of G containing u and v
+    # H = G.subgraph([u, v])
+    # print(H)
+
+    # # get the triangles of the subgraph
+    # tri_uv = [t for t in nx.enumerate_all_cliques(H) if len(t) == 3]
+    tri_uv = sorted(nx.common_neighbors(G,u,v))
+
+    return tri_uv
+
+# n = 5
+# edges = [(0,1), (0,2), (0,3), (0,4), (1,2), (2,3)]
+# m = len(edges)
+# G = nx.Graph(edges)
+mthd.draw_cut(G, nx.spring_layout(G, seed=1), '1'*n, beamer=True)
+plt.axis('off')
+
+for (u,v) in edges:
+    print(get_triangles(G,u,v))
+
+
+# %% graphs
+gg = nx.Graph()
+gg.add_nodes_from(range(5))
+for i in range(0,5):
+    for ii in range(5):
+        if len(get_triangles(gg, i, ii)) == 0:
+            gg.add_edge(i, ii)
+print(gg.edges)
+
+print(get_triangles(gg, 1,2))
+
 
 # %% Variables
 n_wires = n
 shots=1000
-dev = qml.device("default.qubit", wires=n, shots=shots)
+
+increase_degree = False
+
+if increase_degree:
+    dev = qml.device("default.qubit", wires=2*n, shots=shots)
+else:
+    dev = qml.device("default.qubit", wires=n, shots=shots)
 
 
 # %% MaxCut Hamiltonian
@@ -62,12 +116,31 @@ def random_circuit(gamma, beta, seed=12345, counts=False, probs=False, n_layers=
         # choose m random gates for the cost Hamiltonian
         np.random.seed(seed[p])
         qml.Barrier(wires=range(n_wires), only_visual=True)
+
+        # if increasing degree of vertices
+        if increase_degree:
+            for i in range(n_wires):
+                qml.IsingZZ(gamma[p], wires=[i, n_wires+i])
+
+        curr_qubits = nx.Graph()
+        curr_qubits.add_nodes_from(range(n_wires))
         for i in range(m):
-            is_edge=True
-            while is_edge:
-                wire = np.random.choice(n_wires, size=2, replace=False)
-                if (wire[0],wire[1]) not in G.edges():
-                    is_edge=False
+            # if we only want ZZ gates corresponding to edges in G complement
+            # is_edge=True
+            # while is_edge:
+            #     wire = np.random.choice(n_wires, size=2, replace=False)
+
+                # if (wire[0],wire[1]) not in G.edges():
+                #     is_edge=False
+
+            # if we want to exclude triangles
+            wire = np.random.choice(n_wires, size=2, replace=False)
+
+            if len(get_triangles(curr_qubits, wire.numpy()[0], wire.numpy()[1]) 
+                   + get_triangles(G, wire.numpy()[0], wire.numpy()[1])) == 0:
+                curr_qubits.add_edge(wire.numpy()[0], wire.numpy()[1])
+                qml.IsingZZ(gamma[p], wires=[wire.numpy()[0], wire.numpy()[1]])
+
 
             qml.IsingZZ(gamma[p], wires=[wire.numpy()[0], wire.numpy()[1]])
         qml.Barrier(wires=range(n_wires), only_visual=True)
@@ -321,7 +394,7 @@ print('write random_circuits')
 # random_circuits_df = pd.DataFrame.from_dict(random_circuits_dict)
 # random_circuits_df.to_json('random_circuits_data.txt', orient='columns')
 random_circuits_not_edge_df = pd.DataFrame.from_dict(random_circuits_dict)
-random_circuits_not_edge_df.to_json('random_circuits_not_edge_data.txt', orient='columns')
+random_circuits_not_edge_df.to_json('random_circuits_not_triangle_data.txt', orient='columns')
 print('random_circuits written')
 
 
